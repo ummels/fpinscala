@@ -3,6 +3,8 @@ package fpinscala.parallelism
 import java.util.concurrent._
 
 object Par {
+  import scala.language.implicitConversions
+
   type Par[A] = ExecutorService => Future[A]
   
   def run[A](s: ExecutorService)(a: Par[A]): Future[A] = a(s)
@@ -28,10 +30,28 @@ object Par {
       def call = a(es).get
     })
 
+  def asyncF[A,B](f: A => B): A => Par[B] = a => fork(unit(f(a)))
+
   def map[A,B](pa: Par[A])(f: A => B): Par[B] = 
     map2(pa, unit(()))((a,_) => f(a))
 
   def sortPar(parList: Par[List[Int]]) = map(parList)(_.sorted)
+
+  def sequence[A](ps: List[Par[A]]): Par[List[A]] =
+    (ps foldRight unit(List.empty[A])) ((pas, pa) => map2(pas, pa)(_ :: _))
+
+  def parFilter[A](as: IndexedSeq[A])(f: A => Boolean): Par[IndexedSeq[A]] = fork {
+    if (as.isEmpty) unit(Vector())
+    else if (as.length == 1 && f(as.head)) unit(Vector(as.head))
+    else if (as.length == 1) unit(Vector())
+    else {
+      val (l,r) = as.splitAt(as.length/2)
+      map2(parFilter(l)(f), parFilter(r)(f))(_ ++ _)
+    }
+  }
+
+  def parFilter[A](as: List[A])(f: A => Boolean): Par[List[A]] =
+    map(parFilter(as.toIndexedSeq)(f))(_.toList)
 
   def equal[A](e: ExecutorService)(p: Par[A], p2: Par[A]): Boolean = 
     p(e).get == p2(e).get
@@ -39,17 +59,26 @@ object Par {
   def delay[A](fa: => Par[A]): Par[A] = 
     es => fa(es)
 
+  def chooser[A,B](pa: Par[A])(choices: A => Par[B]): Par[B] =
+    es => run(es)(choices(run(es)(pa).get))
+
   def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
-    es => 
-      if (run(es)(cond).get) t(es) // Notice we are blocking on the result of `cond`.
-      else f(es)
+    chooser(cond)(if (_) t else f)
+
+  def choiceN[A](n: Par[Int])(choices: List[Par[A]]): Par[A] =
+    chooser(n)(choices(_))
+
+  def flatMap[A,B](pa: Par[A])(f: A => Par[B]): Par[B] = chooser(pa)(f)
+
+  def join[A](a: Par[Par[A]]): Par[A] = es => a(es).get()(es)
 
   /* Gives us infix syntax for `Par`. */
   implicit def toParOps[A](p: Par[A]): ParOps[A] = new ParOps(p)
 
   class ParOps[A](p: Par[A]) {
-
-
+    def run(es: ExecutorService): Future[A] = Par.run(es)(p)
+    def map[B](f: A => B): Par[B] = Par.map(p)(f)
+    def flatMap[B](f: A => Par[B]): Par[B] = Par.flatMap(p)(f)
   }
 }
 
