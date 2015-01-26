@@ -2,6 +2,9 @@ package fpinscala.streamingio
 
 import fpinscala.iomonad.{IO,Monad,Free,unsafePerformIO}
 
+import scala.language.higherKinds
+import scala.language.implicitConversions
+
 object ImperativeAndLazyIO {
 
                             /*
