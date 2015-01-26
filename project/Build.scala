@@ -4,8 +4,7 @@ import Keys._
 object FPInScalaBuild extends Build {
   val opts = Project.defaultSettings ++ Seq(
     scalaVersion := "2.11.4",
-    resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
-    scalacOptions ++= Seq("-Xlint", "-unchecked", "-deprecation", "-feature")
+    resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
   )
 
   lazy val root =
@@ -21,7 +20,9 @@ object FPInScalaBuild extends Build {
   lazy val exercises =
     Project(id = "exercises",
             base = file("exercises"),
-            settings = opts)
+            settings = opts ++ Seq(
+              scalacOptions ++= Seq("-Xlint", "-unchecked", "-deprecation", "-feature")
+            ))
   lazy val answers =
     Project(id = "answers",
             base = file("answers"),
