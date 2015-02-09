@@ -1,5 +1,8 @@
 package fpinscala.iomonad
 
+import scala.io.StdIn
+import scala.language.{higherKinds, postfixOps, reflectiveCalls}
+
 object IO0 {
                             /*
 
@@ -9,13 +12,13 @@ object IO0 {
 
                              */
   trait IO { self =>
-    def run: Unit
+    def run(): Unit
     def ++(io: IO): IO = new IO {
-      def run = { self.run; io.run }
+      def run() = { self.run(); io.run() }
     }
   }
   object IO {
-    def empty: IO = new IO { def run = () }
+    def empty: IO = new IO { def run() = () }
   }
 
                             /*
@@ -31,9 +34,9 @@ object IO0 {
     (f - 32) * 5.0/9.0
 
   // Ordinary code with side effects
-  def converter: Unit = {
+  def converter(): Unit = {
     println("Enter a temperature in degrees Fahrenheit: ")
-    val d = readLine.toDouble
+    val d = StdIn.readDouble()
     println(fahrenheitToCelsius(d))
   }
 
@@ -77,7 +80,7 @@ object IO1 {
 
   // We can now express the example
 
-  def ReadLine: IO[String] = IO { readLine }
+  def ReadLine: IO[String] = IO { StdIn.readLine() }
   def PrintLine(msg: String): IO[Unit] = IO { println(msg) }
   import IO0.fahrenheitToCelsius
 
@@ -139,7 +142,7 @@ object IO1 {
 
   val factorialREPL: IO[Unit] = sequence_(
     IO { println(helpstring) },
-    doWhile { IO { readLine } } { line =>
+    doWhile { IO { StdIn.readLine() } } { line =>
       val ok = line != "q"
       when (ok) { for {
         n <- factorial(line.toInt)
@@ -191,7 +194,8 @@ object IO2a {
   // tail-recursive function, the one tricky case is left-nested
   // flatMaps, as in `((a flatMap f) flatMap g)`, which we
   // reassociate to the right as `a flatMap (ar => f(a) flatMap g)`
-  @annotation.tailrec def run[A](io: IO[A]): A = io match {
+  @annotation.tailrec
+  def run[A](io: IO[A]): A = io match {
     case Return(a) => a
     case Suspend(r) => r()
     case FlatMap(x, f) => x match {
@@ -341,7 +345,7 @@ object IO3 {
     def toThunk = () => run
 
     def run: Option[String] =
-      try Some(readLine())
+      try Some(StdIn.readLine())
       catch { case e: Exception => None }
 
     def toState = ConsoleState { bufs =>
