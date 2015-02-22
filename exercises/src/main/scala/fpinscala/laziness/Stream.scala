@@ -65,6 +65,8 @@ trait Stream[+A] {
 
   def forAll(p: A => Boolean): Boolean = foldRight(true)((a, b) => p(a) && b)
 
+  def headOption: Option[A] = sys.error("todo")
+
   def startsWith[B](s: Stream[B]): Boolean = (zipAll(s) foldRight true) {
     case ((Some(a), Some(b)), true) if a == b => true
     case ((_, None), true) => true
