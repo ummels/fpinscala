@@ -98,7 +98,14 @@ sealed abstract class STArray[S,A](implicit manifest: Manifest[A]) {
   // Turn the array into an immutable list
   def freeze: ST[S,List[A]] = ST(value.toList)
 
-  def fill(xs: Map[Int,A]): ST[S,Unit] = ???
+  def fill(xs: Map[Int,A]): ST[S,Unit] = new ST[S, Unit] {
+    def run(s: S) = {
+      for ((i, a) <- xs) {
+        value(i) = a
+      }
+      () -> s
+    }
+  }
 
   def swap(i: Int, j: Int): ST[S,Unit] = for {
     x <- read(i)
@@ -124,9 +131,31 @@ object STArray {
 object Immutable {
   def noop[S] = ST[S,Unit](())
 
-  def partition[S](a: STArray[S,Int], l: Int, r: Int, pivot: Int): ST[S,Int] = ???
+  def int[S](n: Int) = ST[S, Int](n)
 
-  def qs[S](a: STArray[S,Int], l: Int, r: Int): ST[S, Unit] = ???
+  def partition[S](a: STArray[S,Int], l: Int, r: Int, pivot: Int): ST[S,Int] = {
+    def loop(pivotVal: Int) = ((l until r) foldLeft int[S](l)) { (st, i) =>
+      for {
+        j <- st
+        x <- a.read(i)
+        j1 <- if (x < pivotVal) a.swap(i, j) map { _ => j + 1} else int[S](j)
+      } yield j1
+    }
+
+    for {
+      pivotVal <- a.read(pivot)
+      _ <- a.swap(pivot, r)
+      j <- loop(pivotVal)
+      _ <- a.swap(j, r)
+    } yield j
+  }
+
+  def qs[S](a: STArray[S,Int], l: Int, r: Int): ST[S, Unit] =
+    if (l < r) for {
+      pi <- partition(a, l, r, l + (r - l) / 2)
+      _ <- qs(a, l, pi - 1)
+      _ <- qs(a, pi + 1, r)
+    } yield () else noop
 
   def quicksort(xs: List[Int]): List[Int] =
     if (xs.isEmpty) xs else ST.runST(new RunnableST[List[Int]] {
@@ -139,5 +168,27 @@ object Immutable {
   })
 }
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 
+sealed abstract class STMap[S,K,V] {
+  protected def content: mutable.HashMap[K, V]
+
+  def size: ST[S, Int] = ST(content.size)
+
+  def get(key: K): ST[S, Option[V]] = ST(content.get(key))
+
+  def put(key: K, value: V): ST[S, Unit] = ST(content += key -> value)
+
+  def remove(key: K): ST[S, Unit] = ST(content -= key)
+
+  def freeze: ST[S, Map[K, V]] = ST(content.toMap)
+}
+
+object STMap {
+  def fromMap[S,K,V](m: Map[K,V]): ST[S, STMap[S,K,V]] =
+    ST(new STMap[S,K,V] {
+      val content = (mutable.HashMap.newBuilder[K, V] ++= m).result()
+    })
+
+  def empty[S,K,V]: ST[S, STMap[S,K,V]] = fromMap(Map.empty[K,V])
+}
